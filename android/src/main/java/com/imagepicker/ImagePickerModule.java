@@ -73,7 +73,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
 
         if (this.options.saveToPhotos && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && !hasPermission(currentActivity)) {
             callback.invoke(getErrorMap(errPermission, null));
-            this.callback = null
+            this.callback = null;
             return;
         }
 
@@ -186,7 +186,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
                 deleteFile(fileUri);
             }
             callback.invoke(getCancelMap());
-            cellback = null;
+            this.callback = null;
             return;
         }
 
