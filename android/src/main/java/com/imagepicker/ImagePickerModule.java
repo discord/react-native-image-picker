@@ -18,8 +18,11 @@ import com.facebook.react.module.annotations.ReactModule;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import static com.imagepicker.Utils.*;
+
+import javax.annotation.Nullable;
 
 @ReactModule(name = ImagePickerModule.NAME)
 public class ImagePickerModule extends ReactContextBaseJavaModule implements ActivityEventListener {
@@ -38,6 +41,8 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
 
     Options options;
     Uri cameraCaptureURI;
+    @Nullable
+    UUID identifier;
 
     public ImagePickerModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -81,6 +86,8 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         File file;
         Intent cameraIntent;
 
+        identifier = UUID.randomUUID();
+
         if (this.options.mediaType.equals(mediaTypeVideo)) {
             requestCode = REQUEST_LAUNCH_VIDEO_CAPTURE;
             cameraIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
@@ -88,12 +95,12 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
             if (this.options.durationLimit > 0) {
                 cameraIntent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, this.options.durationLimit);
             }
-            file = createFile(reactContext, "mp4");
+            file = createFile(reactContext, identifier, "mp4");
             cameraCaptureURI = createUri(file, reactContext);
         } else {
             requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
             cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-            file = createFile(reactContext, "jpg");
+            file = createFile(reactContext, identifier, "jpg");
             cameraCaptureURI = createUri(file, reactContext);
         }
 
@@ -165,7 +172,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
 
     void onAssetsObtained(List<Uri> fileUris) {
         try {
-            callback.invoke(getResponseMap(fileUris, options, reactContext));
+            callback.invoke(getResponseMap(fileUris, identifier, options, reactContext));
         } catch (RuntimeException exception) {
             callback.invoke(getErrorMap(errOthers, exception.getMessage()));
         } finally {
@@ -193,7 +200,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         switch (requestCode) {
             case REQUEST_LAUNCH_IMAGE_CAPTURE:
                 if (options.saveToPhotos) {
-                    saveToPublicDirectory(cameraCaptureURI, reactContext, "photo");
+                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "photo");
                 }
 
                 onAssetsObtained(Collections.singletonList(fileUri));
@@ -205,7 +212,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
 
             case REQUEST_LAUNCH_VIDEO_CAPTURE:
                 if (options.saveToPhotos) {
-                    saveToPublicDirectory(cameraCaptureURI, reactContext, "video");
+                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "video");
                 }
 
                 onAssetsObtained(Collections.singletonList(fileUri));
