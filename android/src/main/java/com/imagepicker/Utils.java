@@ -56,9 +56,10 @@ public class Utils {
 
     public static String cameraPermissionDescription = "This library does not require Manifest.permission.CAMERA, if you add this permission in manifest then you have to obtain the same.";
 
-    public static File createFile(Context reactContext, String fileType) {
+    public static File createFile(Context reactContext, UUID identifier, String fileType) {
         try {
-            String filename = fileNamePrefix  + UUID.randomUUID() + "." + fileType;
+            UUID uuid = identifier != null ? identifier : UUID.randomUUID();
+            String filename = fileNamePrefix  + uuid + "." + fileType;
 
             // getCacheDir will auto-clean according to android docs
             File fileDir = reactContext.getCacheDir();
@@ -78,17 +79,19 @@ public class Utils {
         return FileProvider.getUriForFile(reactContext, authority, file);
     }
 
-    public static void saveToPublicDirectory(Uri uri, Context context, String mediaType) {
+    public static void saveToPublicDirectory(Uri uri, @Nullable UUID identifier, Context context, String mediaType) {
         ContentResolver resolver = context.getContentResolver();
         Uri mediaStoreUri;
         ContentValues fileDetails = new ContentValues();
 
+        UUID uuid = identifier != null ? identifier : UUID.randomUUID();
+
         if (mediaType.equals("video")) {
-            fileDetails.put(MediaStore.Video.Media.DISPLAY_NAME, UUID.randomUUID().toString());
+            fileDetails.put(MediaStore.Video.Media.DISPLAY_NAME, uuid.toString());
             fileDetails.put(MediaStore.Video.Media.MIME_TYPE, resolver.getType(uri));
             mediaStoreUri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, fileDetails);
         } else {
-            fileDetails.put(MediaStore.Images.Media.DISPLAY_NAME, UUID.randomUUID().toString());
+            fileDetails.put(MediaStore.Images.Media.DISPLAY_NAME, uuid.toString());
             fileDetails.put(MediaStore.Images.Media.MIME_TYPE, resolver.getType(uri));
             mediaStoreUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, fileDetails);
         }
@@ -114,13 +117,13 @@ public class Utils {
     }
 
     // Make a copy of shared storage files inside app specific storage so that users can access it later.
-    public static Uri getAppSpecificStorageUri(Uri sharedStorageUri, Context context) {
+    public static Uri getAppSpecificStorageUri(Uri sharedStorageUri, @Nullable UUID identifier, Context context) {
         if (sharedStorageUri == null) {
             return null;
         }
         ContentResolver contentResolver = context.getContentResolver();
         String fileType = getFileTypeFromMime(contentResolver.getType(sharedStorageUri));
-        Uri toUri =  Uri.fromFile(createFile(context, fileType));
+        Uri toUri =  Uri.fromFile(createFile(context, identifier, fileType));
         copyUri(sharedStorageUri, toUri, contentResolver);
         return toUri;
     }
@@ -188,7 +191,7 @@ public class Utils {
 
     // Resize image
     // When decoding a jpg to bitmap all exif meta data will be lost, so make sure to copy orientation exif to new file else image might have wrong orientations
-    public static Uri resizeImage(Uri uri, Context context, Options options) {
+    public static Uri resizeImage(Uri uri, @Nullable UUID identifier, Context context, Options options) {
         try {
             int[] origDimens = getImageDimensions(uri, context);
 
@@ -204,7 +207,7 @@ public class Utils {
             b = Bitmap.createScaledBitmap(b, newDimens[0], newDimens[1], true);
             String originalOrientation = getOrientation(uri, context);
 
-            File file = createFile(context, getFileTypeFromMime(mimeType));
+            File file = createFile(context, identifier, getFileTypeFromMime(mimeType));
             OutputStream os = context.getContentResolver().openOutputStream(Uri.fromFile(file));
             b.compress(getBitmapCompressFormat(mimeType), options.quality, os);
             setOrientation(file, originalOrientation, context);
@@ -451,7 +454,7 @@ public class Utils {
         return map;
     }
 
-    static ReadableMap getResponseMap(List<Uri> fileUris, Options options, Context context) throws RuntimeException {
+    static ReadableMap getResponseMap(List<Uri> fileUris, @Nullable UUID identifier, Options options, Context context) throws RuntimeException {
         boolean isPhoto = options.mediaType.equals(mediaTypePhoto);
         boolean isVideo = options.mediaType.equals(mediaTypeVideo);
         boolean isMixed = options.mediaType.equals(mediaTypeMixed);
@@ -464,9 +467,9 @@ public class Utils {
 
             if (isImageType(uri, context) && (isPhoto || isMixed)) {
                 if (uri.getScheme().contains("content")) {
-                    uri = getAppSpecificStorageUri(uri, context);
+                    uri = getAppSpecificStorageUri(uri, identifier, context);
                 }
-                uri = resizeImage(uri, context, options);
+                uri = resizeImage(uri, identifier, context, options);
                 assets.pushMap(getImageResponseMap(uri, options, context));
             } else if (isVideoType(uri, context) && (isVideo || isMixed)) {
                 assets.pushMap(getVideoResponseMap(uri, options, context));
