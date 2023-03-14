@@ -85,9 +85,20 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
 
 -(NSMutableDictionary *)mapImageToAsset:(UIImage *)image data:(NSData *)data phAsset:(PHAsset * _Nullable)phAsset {
     NSString *fileType = [ImagePickerUtils getFileType:data];
+    NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
     
     if ((target == camera) && [self.options[@"saveToPhotos"] boolValue]) {
-        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil);
+        __block PHObjectPlaceholder *placeholder;
+        NSError *error = nil;
+        [[PHPhotoLibrary sharedPhotoLibrary] performChangesAndWait:^{
+            PHAssetChangeRequest *assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImage:image];
+            placeholder = [assetRequest placeholderForCreatedAsset];
+        } error:&error];
+        // Don't fail the entire process on photo library error, because we still
+        // have the successful temporary filepath to work with.
+        if (error == nil) {
+            asset[@"localIdentifier"] = [placeholder localIdentifier];
+        }
     }
     
     if (![fileType isEqualToString:@"gif"]) {
@@ -102,7 +113,6 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
         data = UIImagePNGRepresentation(image);
     }
     
-    NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
     asset[@"type"] = [@"image/" stringByAppendingString:fileType];
 
     NSString *fileName = [self getImageFileName:fileType];
@@ -126,7 +136,7 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     asset[@"fileName"] = fileName;
     asset[@"width"] = @(image.size.width);
     asset[@"height"] = @(image.size.height);
-    
+
     if(phAsset){
         asset[@"timestamp"] = [self getDateTimeInUTC:phAsset.creationDate];
         asset[@"id"] = phAsset.localIdentifier;
@@ -140,9 +150,20 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     NSString *fileName = [url lastPathComponent];
     NSString *path = [[NSTemporaryDirectory() stringByStandardizingPath] stringByAppendingPathComponent:fileName];
     NSURL *videoDestinationURL = [NSURL fileURLWithPath:path];
-
+    NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
+    
     if ((target == camera) && [self.options[@"saveToPhotos"] boolValue]) {
-        UISaveVideoAtPathToSavedPhotosAlbum(url.path, nil, nil, nil);
+        __block PHObjectPlaceholder *placeholder;
+        NSError *error = nil;
+        [[PHPhotoLibrary sharedPhotoLibrary] performChangesAndWait:^{
+            PHAssetChangeRequest *assetRequest = [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:url];
+            placeholder = [assetRequest placeholderForCreatedAsset];
+        } error:&error];
+        // Don't fail the entire process on photo library error, because we still
+        // have the successful temporary filepath to work with.
+        if (error == nil) {
+            asset[@"localIdentifier"] = [placeholder localIdentifier];
+        }
     }
     
     if (![url.URLByResolvingSymlinksInPath.path isEqualToString:videoDestinationURL.URLByResolvingSymlinksInPath.path]) {
@@ -168,7 +189,6 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
         }
     }
 
-    NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
     CGSize dimentions = [ImagePickerUtils getVideoDimensionsFromUrl:videoDestinationURL];
     asset[@"fileName"] = fileName;
     asset[@"duration"] = [NSNumber numberWithDouble:CMTimeGetSeconds([AVAsset assetWithURL:videoDestinationURL].duration)];
