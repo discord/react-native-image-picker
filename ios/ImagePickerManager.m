@@ -27,11 +27,14 @@ NSString *errPermission = @"permission";
 NSString *errOthers = @"others";
 RNImagePickerTarget target;
 
+photoSelected = NO;
+
 RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(launchCamera:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
 {
     target = camera;
+    photoSelected = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self launchImagePicker:options callback:callback];
     });
@@ -40,6 +43,7 @@ RCT_EXPORT_METHOD(launchCamera:(NSDictionary *)options callback:(RCTResponseSend
 RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
 {
     target = library;
+    photoSelected = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self launchImagePicker:options callback:callback];
     });
@@ -56,6 +60,34 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     
     self.options = options;
     
+#if __has_include(<PhotosUI/PHPicker.h>)
+    if([self.options[@"useNewIOSPicker"] boolValue]) {
+        if (@available(iOS 14, *)) {
+            if (target == library) {
+                PHPickerConfiguration *configuration = [ImagePickerUtils makeConfigurationFromOptions:options target:target];
+                PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:configuration];
+                picker.delegate = self;
+                picker.modalPresentationStyle = [ImagePickerUtils getPresentationStyle:options[@"presentationStyle"]];
+                picker.presentationController.delegate = self;
+                
+                if([self.options[@"includeExtra"] boolValue]) {
+                    
+                    [self checkPhotosPermissions:^(BOOL granted) {
+                        if (!granted) {
+                            self.callback(@[@{@"errorCode": errPermission}]);
+                            return;
+                        }
+                        [self showPickerViewController:picker];
+                    }];
+                } else {
+                    [self showPickerViewController:picker];
+                }
+                
+                return;
+            }
+        }
+    }
+#endif
     UIImagePickerController *picker = [[UIImagePickerController alloc] init];
     [ImagePickerUtils setupPickerFromOptions:picker options:self.options target:target];
     picker.delegate = self;
@@ -83,34 +115,70 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
 
 #pragma mark - Helpers
 
+NSData* extractImageData(UIImage* image){
+    CFMutableDataRef imageData = CFDataCreateMutable(NULL, 0);
+    CGImageDestinationRef destination = CGImageDestinationCreateWithData(imageData, kUTTypeJPEG, 1, NULL);
+    
+    CFStringRef orientationKey[1];
+    CFTypeRef   orientationValue[1];
+    CGImagePropertyOrientation CGOrientation = CGImagePropertyOrientationForUIImageOrientation(image.imageOrientation);
+
+    orientationKey[0] = kCGImagePropertyOrientation;
+    orientationValue[0] = CFNumberCreate(NULL, kCFNumberIntType, &CGOrientation);
+
+    CFDictionaryRef imageProps = CFDictionaryCreate( NULL, (const void **)orientationKey, (const void **)orientationValue, 1,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    
+    CGImageDestinationAddImage(destination, image.CGImage, imageProps);
+    
+    CGImageDestinationFinalize(destination);
+    
+    CFRelease(destination);
+    CFRelease(orientationValue[0]);
+    CFRelease(imageProps);
+    return (__bridge NSData *)imageData;
+}
+
 -(NSMutableDictionary *)mapImageToAsset:(UIImage *)image data:(NSData *)data phAsset:(PHAsset * _Nullable)phAsset {
     NSString *fileType = [ImagePickerUtils getFileType:data];
     NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
     
-    if ((target == camera) && [self.options[@"saveToPhotos"] boolValue]) {
-        __block PHObjectPlaceholder *placeholder;
-        NSError *error = nil;
-        [[PHPhotoLibrary sharedPhotoLibrary] performChangesAndWait:^{
-            PHAssetChangeRequest *assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImage:image];
-            placeholder = [assetRequest placeholderForCreatedAsset];
-        } error:&error];
-        // Don't fail the entire process on photo library error, because we still
-        // have the successful temporary filepath to work with.
-        if (error == nil) {
-            asset[@"localIdentifier"] = [placeholder localIdentifier];
+    if (target == camera) {
+        if ([self.options[@"saveToPhotos"] boolValue]) {
+            __block PHObjectPlaceholder *placeholder;
+            NSError *error = nil;
+            [[PHPhotoLibrary sharedPhotoLibrary] performChangesAndWait:^{
+                PHAssetChangeRequest *assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImage:image];
+                placeholder = [assetRequest placeholderForCreatedAsset];
+            } error:&error];
+            // Don't fail the entire process on photo library error, because we still
+            // have the successful temporary filepath to work with.
+            if (error == nil) {
+                asset[@"id"] = [placeholder localIdentifier];
+            }
         }
+        data = extractImageData(image);
     }
     
+    if (data == nil) {
+        data = extractImageData(image);
+    }
+    
+    UIImage* newImage = image;
     if (![fileType isEqualToString:@"gif"]) {
-        image = [ImagePickerUtils resizeImage:image
+        newImage = [ImagePickerUtils resizeImage:image
                                      maxWidth:[self.options[@"maxWidth"] floatValue]
                                     maxHeight:[self.options[@"maxHeight"] floatValue]];
     }
 
-    if ([fileType isEqualToString:@"jpg"]) {
-        data = UIImageJPEGRepresentation(image, [self.options[@"quality"] floatValue]);
-    } else if ([fileType isEqualToString:@"png"]) {
-        data = UIImagePNGRepresentation(image);
+    float quality = [self.options[@"quality"] floatValue];
+    if (![image isEqual:newImage] || (quality >= 0 && quality < 1)) {
+        if ([fileType isEqualToString:@"jpg"]) {
+            data = UIImageJPEGRepresentation(newImage, quality);
+        }
+        else if ([fileType isEqualToString:@"png"]) {
+            data = UIImagePNGRepresentation(newImage);
+        }
     }
     
     asset[@"type"] = [@"image/" stringByAppendingString:fileType];
@@ -134,8 +202,8 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     }
 
     asset[@"fileName"] = fileName;
-    asset[@"width"] = @(image.size.width);
-    asset[@"height"] = @(image.size.height);
+    asset[@"width"] = @(newImage.size.width);
+    asset[@"height"] = @(newImage.size.height);
 
     if(phAsset){
         asset[@"timestamp"] = [self getDateTimeInUTC:phAsset.creationDate];
@@ -144,6 +212,31 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     }
     
     return asset;
+}
+
+CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
+  UIImageOrientation uiOrientation)
+{
+    // code from here:
+    // https://developer.apple.com/documentation/imageio/cgimagepropertyorientation?language=objc
+    switch (uiOrientation) {
+    case UIImageOrientationUp:
+        return kCGImagePropertyOrientationUp;
+    case UIImageOrientationDown:
+        return kCGImagePropertyOrientationDown;
+    case UIImageOrientationLeft:
+        return kCGImagePropertyOrientationLeft;
+    case UIImageOrientationRight:
+        return kCGImagePropertyOrientationRight;
+    case UIImageOrientationUpMirrored:
+        return kCGImagePropertyOrientationUpMirrored;
+    case UIImageOrientationDownMirrored:
+        return kCGImagePropertyOrientationDownMirrored;
+    case UIImageOrientationLeftMirrored:
+        return kCGImagePropertyOrientationLeftMirrored;
+    case UIImageOrientationRightMirrored:
+        return kCGImagePropertyOrientationRightMirrored;
+    }
 }
 
 -(NSMutableDictionary *)mapVideoToAsset:(NSURL *)url phAsset:(PHAsset * _Nullable)phAsset error:(NSError **)error {
@@ -162,7 +255,7 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
         // Don't fail the entire process on photo library error, because we still
         // have the successful temporary filepath to work with.
         if (error == nil) {
-            asset[@"localIdentifier"] = [placeholder localIdentifier];
+            asset[@"id"] = [placeholder localIdentifier];
         }
     }
     
@@ -333,10 +426,15 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     dispatch_block_t dismissCompletionBlock = ^{
         NSMutableArray<NSDictionary *> *assets = [[NSMutableArray alloc] initWithCapacity:1];
         PHAsset *asset = nil;
+        
+        if (photoSelected == YES) {
+            return;
+        }
+        photoSelected = YES;
 
         // If include extra, we fetch the PHAsset, this required library permissions
         if([self.options[@"includeExtra"] boolValue]) {
-          asset = [ImagePickerUtils fetchPHAssetOnIOS13:info];
+            asset = [ImagePickerUtils fetchPHAssetOnIOS13:info];
         }
 
         if ([info[UIImagePickerControllerMediaType] isEqualToString:(NSString *) kUTTypeImage]) {
@@ -385,3 +483,98 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
 }
 
 @end
+
+#if __has_include(<PhotosUI/PHPicker.h>)
+@implementation ImagePickerManager (PHPickerViewControllerDelegate)
+
+- (void)picker:(PHPickerViewController*)picker
+  didFinishPicking:(NSArray<PHPickerResult*>*)results API_AVAILABLE(ios(14))
+{
+    [picker dismissViewControllerAnimated:YES completion:nil];
+
+    if (photoSelected == YES) {
+        return;
+    }
+    photoSelected = YES;
+
+    dispatch_group_t completionGroup = dispatch_group_create();
+    NSMutableArray<NSDictionary*>* assets = [[NSMutableArray alloc] initWithCapacity:results.count];
+    for (int i = 0; i < results.count; i++) {
+        [assets addObject:(NSDictionary*)[NSNull null]];
+    }
+
+    [results enumerateObjectsUsingBlock:^(PHPickerResult* result, NSUInteger index, BOOL* stop) {
+        PHAsset* asset = nil;
+        NSItemProvider* provider = result.itemProvider;
+        BOOL isPreselectedAsset = [provider.registeredTypeIdentifiers count] == 0;
+
+        // If include extra, we fetch the PHAsset, this required library permissions
+        if (([self.options[@"includeExtra"] boolValue] && result.assetIdentifier != nil) || isPreselectedAsset) {
+            PHFetchResult* fetchResult =
+              [PHAsset fetchAssetsWithLocalIdentifiers:@[ result.assetIdentifier ] options:nil];
+            asset = fetchResult.firstObject;
+        }
+
+        dispatch_group_enter(completionGroup);
+
+        if (isPreselectedAsset && asset !=  nil) {
+            // Return a bare asset with the id populate, so consumer can handle deduplication.
+            NSMutableDictionary* mappedAsset = [[NSMutableDictionary alloc] init];
+            mappedAsset[@"id"] = asset.localIdentifier;
+            mappedAsset[@"isPreselected"] = @(YES);
+            assets[index] = mappedAsset;
+            dispatch_group_leave(completionGroup);
+        } else if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
+            NSString *identifier = provider.registeredTypeIdentifiers.firstObject;
+            // Matches both com.apple.live-photo-bundle and com.apple.private.live-photo-bundle
+            if ([identifier containsString:@"live-photo-bundle"]) {
+                // Handle live photos
+                identifier = @"public.jpeg";
+            }
+
+            [provider loadFileRepresentationForTypeIdentifier:identifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+                NSData *data = [[NSData alloc] initWithContentsOfURL:url];
+                UIImage *image = [[UIImage alloc] initWithData:data];
+                
+                NSMutableDictionary* mappedAsset = [self mapImageToAsset:image data:data phAsset:asset];
+                mappedAsset[@"id"] = result.assetIdentifier;
+                assets[index] = mappedAsset;
+                dispatch_group_leave(completionGroup);
+            }];
+        } else if ([provider hasItemConformingToTypeIdentifier:(NSString*)kUTTypeMovie]) {
+            [provider
+              loadFileRepresentationForTypeIdentifier:(NSString*)kUTTypeMovie
+                                    completionHandler:^(NSURL* _Nullable url,
+                                                        NSError* _Nullable error) {
+                                        NSMutableDictionary* mappedAsset =
+                                          [self mapVideoToAsset:url phAsset:asset error:nil];
+                                        if (mappedAsset != nil) {
+                                            mappedAsset[@"id"] = result.assetIdentifier;
+                                            assets[index] = mappedAsset;
+                                        }
+                                        dispatch_group_leave(completionGroup);
+                                    }];
+        } else {
+            // The provider didn't have an item matching photo or video (fails on M1 Mac Simulator)
+            dispatch_group_leave(completionGroup);
+        }
+    }];
+
+    dispatch_group_notify(completionGroup, dispatch_get_main_queue(), ^{
+        //  mapVideoToAsset can fail and return nil, leaving asset NSNull.
+        for (NSDictionary* asset in assets) {
+            if ([asset isEqual:[NSNull null]]) {
+                self.callback(@[ @{@"errorCode" : errOthers} ]);
+                return;
+            }
+        }
+
+        NSMutableDictionary* response = [[NSMutableDictionary alloc] init];
+        [response setObject:assets forKey:@"assets"];
+
+        self.callback(@[ response ]);
+    });
+}
+
+@end
+#endif
