@@ -456,6 +456,9 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
         NSMutableDictionary *response = [[NSMutableDictionary alloc] init];
         response[@"assets"] = assets;
+        if (@available(iOS 15, *)) {
+            response[@"replaceSelection"] = @(YES);
+        }
         self.callback(@[response]);
     };
 
@@ -571,7 +574,9 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
         NSMutableDictionary* response = [[NSMutableDictionary alloc] init];
         [response setObject:assets forKey:@"assets"];
-
+        if (@available(iOS 15, *)) {
+            response[@"replaceSelection"] = @(YES);
+        }
         self.callback(@[ response ]);
     });
 }
