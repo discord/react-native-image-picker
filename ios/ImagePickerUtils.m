@@ -2,6 +2,26 @@
 #import <CoreServices/CoreServices.h>
 #import <PhotosUI/PhotosUI.h>
 
+
+@implementation RCTConvert(PresentationStyle)
+
+// see: https://developer.apple.com/documentation/uikit/uimodalpresentationstyle?language=objc
+RCT_ENUM_CONVERTER(
+    UIModalPresentationStyle,
+    (@{
+      @"currentContext": @(UIModalPresentationCurrentContext),
+      @"fullScreen": @(UIModalPresentationFullScreen),
+      @"pageSheet": @(UIModalPresentationPageSheet),
+      @"formSheet": @(UIModalPresentationFormSheet),
+      @"popover": @(UIModalPresentationPopover),
+      @"overFullScreen": @(UIModalPresentationOverFullScreen),
+      @"overCurrentContext": @(UIModalPresentationOverCurrentContext)
+    }),
+    UIModalPresentationCurrentContext,
+    integerValue)
+
+@end
+
 @implementation ImagePickerUtils
 
 + (void) setupPickerFromOptions:(UIImagePickerController *)picker options:(NSDictionary *)options target:(RNImagePickerTarget)target
@@ -43,7 +63,12 @@
         picker.mediaTypes = @[(NSString *)kUTTypeImage, (NSString *)kUTTypeMovie];
     }
 
-    picker.modalPresentationStyle = UIModalPresentationCurrentContext;
+    picker.modalPresentationStyle = [ImagePickerUtils getPresentationStyle:options[@"presentationStyle"]];
+}
+
++ (UIModalPresentationStyle) getPresentationStyle:(id)presentationStyle
+{
+    return [RCTConvert UIModalPresentationStyle:presentationStyle];
 }
 
 + (PHPickerConfiguration *)makeConfigurationFromOptions:(NSDictionary *)options target:(RNImagePickerTarget)target API_AVAILABLE(ios(14))
@@ -58,8 +83,12 @@
         configuration = [[PHPickerConfiguration alloc] init];
     }
     
-    configuration.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
+    configuration.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeAutomatic;
     configuration.selectionLimit = [options[@"selectionLimit"] integerValue];
+    if (@available(iOS 15.0, *)) {
+        configuration.selection = PHPickerConfigurationSelectionOrdered;
+        configuration.preselectedAssetIdentifiers = options[@"selection"];
+    }
 
     if ([options[@"mediaType"] isEqualToString:@"video"]) {
         configuration.filter = [PHPickerFilter videosFilter];

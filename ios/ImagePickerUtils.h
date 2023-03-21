@@ -9,6 +9,8 @@
 
 + (void)setupPickerFromOptions:(UIImagePickerController *)picker options:(NSDictionary *)options target:(RNImagePickerTarget)target;
 
++ (UIModalPresentationStyle) getPresentationStyle:(id)presentationStyle;
+
 + (PHPickerConfiguration *)makeConfigurationFromOptions:(NSDictionary *)options target:(RNImagePickerTarget)target API_AVAILABLE(ios(14));
 
 + (NSString*)getFileType:(NSData*)imageData;
