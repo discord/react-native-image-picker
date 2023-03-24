@@ -214,6 +214,31 @@ NSData* extractImageData(UIImage* image){
     return asset;
 }
 
+-(NSMutableDictionary *)mapPHAssetToAsset:(PHAsset*)phAsset {
+    NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
+    asset[@"uri"] = [NSString stringWithFormat:@"ph://%@", [phAsset localIdentifier]];
+    PHAssetResource* resource = [[PHAssetResource assetResourcesForAsset:phAsset] firstObject];
+    asset[@"fileSize"] = [resource valueForKey:@"fileSize"];
+    asset[@"fileName"] = resource.originalFilename;
+    asset[@"width"] = @(phAsset.pixelWidth);
+    asset[@"height"] = @(phAsset.pixelHeight);
+    asset[@"timestamp"] = [self getDateTimeInUTC:phAsset.creationDate];
+    asset[@"id"] = phAsset.localIdentifier;
+    return asset;
+}
+
+-(NSMutableDictionary *)mapPHAssetImageToAsset:(PHAsset*)phAsset {
+    NSMutableDictionary *asset = [self mapPHAssetToAsset:phAsset];
+    asset[@"fileType"] = @"image";
+    return asset;
+}
+
+-(NSMutableDictionary *)mapPHAssetVideoToAsset:(PHAsset*)phAsset {
+    NSMutableDictionary *asset = [self mapPHAssetToAsset:phAsset];
+    asset[@"fileType"] = @"video";
+    return asset;
+}
+
 CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
   UIImageOrientation uiOrientation)
 {
@@ -512,54 +537,74 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
         BOOL isPreselectedAsset = [provider.registeredTypeIdentifiers count] == 0;
 
         // If include extra, we fetch the PHAsset, this required library permissions
-        if (([self.options[@"includeExtra"] boolValue] && result.assetIdentifier != nil) || isPreselectedAsset) {
+        if (([self.options[@"includeExtra"] boolValue] && result.assetIdentifier != nil) || isPreselectedAsset || [self.options[@"skipProcessing"] boolValue]) {
             PHFetchResult* fetchResult =
               [PHAsset fetchAssetsWithLocalIdentifiers:@[ result.assetIdentifier ] options:nil];
             asset = fetchResult.firstObject;
         }
-
-        dispatch_group_enter(completionGroup);
-
+        
         if (isPreselectedAsset && asset !=  nil) {
             // Return a bare asset with the id populate, so consumer can handle deduplication.
             NSMutableDictionary* mappedAsset = [[NSMutableDictionary alloc] init];
             mappedAsset[@"id"] = asset.localIdentifier;
             mappedAsset[@"isPreselected"] = @(YES);
             assets[index] = mappedAsset;
-            dispatch_group_leave(completionGroup);
-        } else if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
-            NSString *identifier = provider.registeredTypeIdentifiers.firstObject;
-            // Matches both com.apple.live-photo-bundle and com.apple.private.live-photo-bundle
-            if ([identifier containsString:@"live-photo-bundle"]) {
-                // Handle live photos
-                identifier = @"public.jpeg";
+            return;
+        }
+        
+        if ([self.options[@"skipProcessing"] boolValue]) {
+            // When the skipProcessing flag is set, we avoid expensive file-content operations by simply
+            // fetching metadata via the PHAsset. As a result, this doesn't respect any of the library's
+            // special data-processing configurations, such as "quality" or "includeBase64". It also omits
+            // the "fileType" property in the response because that would require inspecting the file contents.
+            // The returned URI for the asset is a PhotoKit "ph://" prefixed uri.
+            if (asset == nil) {
+                return;
             }
-
-            [provider loadFileRepresentationForTypeIdentifier:identifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
-                NSData *data = [[NSData alloc] initWithContentsOfURL:url];
-                UIImage *image = [[UIImage alloc] initWithData:data];
-                
-                NSMutableDictionary* mappedAsset = [self mapImageToAsset:image data:data phAsset:asset];
-                mappedAsset[@"id"] = result.assetIdentifier;
+            if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
+                NSMutableDictionary* mappedAsset = [self mapPHAssetImageToAsset:asset];
                 assets[index] = mappedAsset;
-                dispatch_group_leave(completionGroup);
-            }];
-        } else if ([provider hasItemConformingToTypeIdentifier:(NSString*)kUTTypeMovie]) {
-            [provider
-              loadFileRepresentationForTypeIdentifier:(NSString*)kUTTypeMovie
-                                    completionHandler:^(NSURL* _Nullable url,
-                                                        NSError* _Nullable error) {
-                                        NSMutableDictionary* mappedAsset =
-                                          [self mapVideoToAsset:url phAsset:asset error:nil];
-                                        if (mappedAsset != nil) {
-                                            mappedAsset[@"id"] = result.assetIdentifier;
-                                            assets[index] = mappedAsset;
-                                        }
-                                        dispatch_group_leave(completionGroup);
-                                    }];
+            } else if ([provider hasItemConformingToTypeIdentifier:(NSString*)kUTTypeMovie]) {
+                NSMutableDictionary* mappedAsset = [self mapPHAssetVideoToAsset:asset];
+                assets[index] = mappedAsset;
+            }
         } else {
-            // The provider didn't have an item matching photo or video (fails on M1 Mac Simulator)
-            dispatch_group_leave(completionGroup);
+            dispatch_group_enter(completionGroup);
+            
+            if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
+                NSString *identifier = provider.registeredTypeIdentifiers.firstObject;
+                // Matches both com.apple.live-photo-bundle and com.apple.private.live-photo-bundle
+                if ([identifier containsString:@"live-photo-bundle"]) {
+                    // Handle live photos
+                    identifier = @"public.jpeg";
+                }
+                
+                [provider loadFileRepresentationForTypeIdentifier:identifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+                    NSData *data = [[NSData alloc] initWithContentsOfURL:url];
+                    UIImage *image = [[UIImage alloc] initWithData:data];
+                    
+                    NSMutableDictionary* mappedAsset = [self mapImageToAsset:image data:data phAsset:asset];
+                    mappedAsset[@"id"] = result.assetIdentifier;
+                    assets[index] = mappedAsset;
+                    dispatch_group_leave(completionGroup);
+                }];
+            } else if ([provider hasItemConformingToTypeIdentifier:(NSString*)kUTTypeMovie]) {
+                [provider
+                 loadFileRepresentationForTypeIdentifier:(NSString*)kUTTypeMovie
+                 completionHandler:^(NSURL* _Nullable url,
+                                     NSError* _Nullable error) {
+                    NSMutableDictionary* mappedAsset =
+                    [self mapVideoToAsset:url phAsset:asset error:nil];
+                    if (mappedAsset != nil) {
+                        mappedAsset[@"id"] = result.assetIdentifier;
+                        assets[index] = mappedAsset;
+                    }
+                    dispatch_group_leave(completionGroup);
+                }];
+            } else {
+                // The provider didn't have an item matching photo or video (fails on M1 Mac Simulator)
+                dispatch_group_leave(completionGroup);
+            }
         }
     }];
 
