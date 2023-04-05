@@ -155,6 +155,12 @@ NSData* extractImageData(UIImage* image){
             // have the successful temporary filepath to work with.
             if (error == nil) {
                 asset[@"id"] = [placeholder localIdentifier];
+                if ([self.options[@"skipProcessing"] boolValue]) {
+                    PHFetchResult* fetchResult =
+                      [PHAsset fetchAssetsWithLocalIdentifiers:@[ [placeholder localIdentifier] ] options:nil];
+                    PHAsset* phAsset = fetchResult.firstObject;
+                    return [self mapPHAssetImageToAsset:phAsset];
+                }
             }
         }
         data = extractImageData(image);
@@ -281,6 +287,12 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
         // have the successful temporary filepath to work with.
         if (error == nil) {
             asset[@"id"] = [placeholder localIdentifier];
+            if ([self.options[@"skipProcessing"] boolValue]) {
+                PHFetchResult* fetchResult =
+                  [PHAsset fetchAssetsWithLocalIdentifiers:@[ [placeholder localIdentifier] ] options:nil];
+                PHAsset* phAsset = fetchResult.firstObject;
+                return [self mapPHAssetVideoToAsset:phAsset];
+            }
         }
     }
     
