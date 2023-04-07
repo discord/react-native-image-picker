@@ -563,16 +563,16 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
             assets[index] = mappedAsset;
             return;
         }
-        
-        if ([self.options[@"skipProcessing"] boolValue]) {
+
+        // It's possible that the user selected an image which is NOT shared to the application, permissions-wise.
+        // In those cases, the PHAsset will be nil because it can't be fetched. Therefore, we need to fall back to
+        // the raw UIImage strategy by loading data from the provider's url.
+        if (asset != nil && [self.options[@"skipProcessing"] boolValue]) {
             // When the skipProcessing flag is set, we avoid expensive file-content operations by simply
             // fetching metadata via the PHAsset. As a result, this doesn't respect any of the library's
             // special data-processing configurations, such as "quality" or "includeBase64". It also omits
             // the "fileType" property in the response because that would require inspecting the file contents.
             // The returned URI for the asset is a PhotoKit "ph://" prefixed uri.
-            if (asset == nil) {
-                return;
-            }
             if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
                 NSMutableDictionary* mappedAsset = [self mapPHAssetImageToAsset:asset];
                 assets[index] = mappedAsset;
