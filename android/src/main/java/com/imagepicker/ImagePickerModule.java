@@ -56,7 +56,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
     private ActivityResultLauncher<Intent> libraryLauncher;
     private FragmentActivity currentFragmentActivity;
 
-            public ImagePickerModule(ReactApplicationContext reactContext) {
+    public ImagePickerModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
         this.reactContext.addActivityEventListener(this);
@@ -78,22 +78,16 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
     @Override
     public void onHostDestroy() {}
 
-    @Override
-    public void initialize() {
-        super.initialize();
-    }
-
-
     @NonNull
     @Override
     public String getName() {
         return NAME;
     }
 
-        /**
+    /**
      * Initialize launchers when we have access to a FragmentActivity during proper lifecycle
      */
-        private void initializeLaunchers(FragmentActivity activity) {
+    private void initializeLaunchers(FragmentActivity activity) {
         if (activity == null) return;
 
         // Only register if we haven't already for this activity
@@ -104,66 +98,27 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
                     currentFragmentActivity = activity;
 
                     cameraLauncher = activity.registerForActivityResult(
-                        new ActivityResultContracts.StartActivityForResult(),
-                        result -> {
-                            int requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
-                            if (this.options != null && this.options.mediaType.equals(mediaTypeVideo)) {
-                                requestCode = REQUEST_LAUNCH_VIDEO_CAPTURE;
+                            new ActivityResultContracts.StartActivityForResult(),
+                            result -> {
+                                int requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
+                                if (this.options != null && this.options.mediaType.equals(mediaTypeVideo)) {
+                                    requestCode = REQUEST_LAUNCH_VIDEO_CAPTURE;
+                                }
+                                onActivityResult(activity, requestCode, result.getResultCode(), result.getData());
                             }
-                            onActivityResult(activity, requestCode, result.getResultCode(), result.getData());
-                        }
                     );
 
                     libraryLauncher = activity.registerForActivityResult(
-                        new ActivityResultContracts.StartActivityForResult(),
-                        result -> {
-                            onActivityResult(activity, REQUEST_LAUNCH_LIBRARY, result.getResultCode(), result.getData());
-                        }
+                            new ActivityResultContracts.StartActivityForResult(),
+                            result -> {
+                                onActivityResult(activity, REQUEST_LAUNCH_LIBRARY, result.getResultCode(), result.getData());
+                            }
                     );
 
                 }
             } catch (IllegalStateException e) {
                 // Failed to register - activity in wrong state
             }
-        }
-    }
-
-    @Override
-    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
-        // onActivityResult is called even when ActivityNotFoundException occurs
-        if (!isValidRequestCode(requestCode) || (this.callback == null)) {
-            return;
-        }
-
-        if (resultCode != Activity.RESULT_OK) {
-            if (requestCode == REQUEST_LAUNCH_IMAGE_CAPTURE) {
-                deleteFile(fileUri);
-            }
-            callback.invoke(getCancelMap());
-            this.callback = null;
-            return;
-        }
-
-        switch (requestCode) {
-            case REQUEST_LAUNCH_IMAGE_CAPTURE:
-                if (options.saveToPhotos) {
-                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "photo");
-                }
-
-                onAssetsObtained(Collections.singletonList(fileUri));
-                break;
-
-            case REQUEST_LAUNCH_LIBRARY:
-                onAssetsObtained(collectUrisFromData(data));
-                break;
-
-            case REQUEST_LAUNCH_VIDEO_CAPTURE:
-                if (options.saveToPhotos) {
-                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "video");
-                }
-
-                onAssetsObtained(Collections.singletonList(fileUri));
-                break;
         }
     }
 
@@ -259,18 +214,18 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         boolean isVideo = this.options.mediaType.equals(mediaTypeVideo);
         boolean isMixed = this.options.mediaType.equals(mediaTypeMixed);
 
-        if(isSingleSelect && (isPhoto || isVideo)) {
+        if (isSingleSelect && (isPhoto || isVideo)) {
             libraryIntent = new Intent(Intent.ACTION_PICK);
         } else {
             libraryIntent = new Intent(Intent.ACTION_GET_CONTENT);
             libraryIntent.addCategory(Intent.CATEGORY_OPENABLE);
         }
 
-        if(!isSingleSelect) {
+        if (!isSingleSelect) {
             libraryIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         }
 
-        if(isPhoto) {
+        if (isPhoto) {
             libraryIntent.setType("image/*");
         } else if (isVideo) {
             libraryIntent.setType("video/*");
@@ -309,10 +264,6 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         }
     }
 
-
-    @Override
-    public void onNewIntent(Intent intent) { }
-
     @Override
     public void invalidate() {
         super.invalidate();
@@ -329,4 +280,46 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
             currentFragmentActivity = null;
         }
     }
+
+    @Override
+    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+        // onActivityResult is called even when ActivityNotFoundException occurs
+        if (!isValidRequestCode(requestCode) || (this.callback == null)) {
+            return;
+        }
+
+        if (resultCode != Activity.RESULT_OK) {
+            if (requestCode == REQUEST_LAUNCH_IMAGE_CAPTURE) {
+                deleteFile(fileUri);
+            }
+            callback.invoke(getCancelMap());
+            this.callback = null;
+            return;
+        }
+
+        switch (requestCode) {
+            case REQUEST_LAUNCH_IMAGE_CAPTURE:
+                if (options.saveToPhotos) {
+                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "photo");
+                }
+
+                onAssetsObtained(Collections.singletonList(fileUri));
+                break;
+
+            case REQUEST_LAUNCH_LIBRARY:
+                onAssetsObtained(collectUrisFromData(data));
+                break;
+
+            case REQUEST_LAUNCH_VIDEO_CAPTURE:
+                if (options.saveToPhotos) {
+                    saveToPublicDirectory(cameraCaptureURI, identifier, reactContext, "video");
+                }
+
+                onAssetsObtained(Collections.singletonList(fileUri));
+                break;
+        }
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {}
 }
