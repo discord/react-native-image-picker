@@ -11,7 +11,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
-import androidx.lifecycle.Lifecycle;
 
 import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.Callback;
@@ -66,8 +65,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
     @Override
     public void onHostResume() {
         Activity currentActivity = getCurrentActivity();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP &&
-            currentActivity instanceof FragmentActivity fragmentActivity) {
+        if (currentActivity instanceof FragmentActivity fragmentActivity) {
             initializeLaunchers(fragmentActivity);
         }
     }
@@ -93,29 +91,25 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         // Only register if we haven't already for this activity
         if (currentFragmentActivity != activity || cameraLauncher == null) {
             try {
-                // Check if we can register (activity must be at least CREATED)
-                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.CREATED)) {
-                    currentFragmentActivity = activity;
+                currentFragmentActivity = activity;
 
-                    cameraLauncher = activity.registerForActivityResult(
-                            new ActivityResultContracts.StartActivityForResult(),
-                            result -> {
-                                int requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
-                                if (this.options != null && this.options.mediaType.equals(mediaTypeVideo)) {
-                                    requestCode = REQUEST_LAUNCH_VIDEO_CAPTURE;
-                                }
-                                onActivityResult(activity, requestCode, result.getResultCode(), result.getData());
+                cameraLauncher = activity.registerForActivityResult(
+                        new ActivityResultContracts.StartActivityForResult(),
+                        result -> {
+                            int requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
+                            if (this.options != null && this.options.mediaType.equals(mediaTypeVideo)) {
+                                requestCode = REQUEST_LAUNCH_VIDEO_CAPTURE;
                             }
-                    );
+                            onActivityResult(activity, requestCode, result.getResultCode(), result.getData());
+                        }
+                );
 
-                    libraryLauncher = activity.registerForActivityResult(
-                            new ActivityResultContracts.StartActivityForResult(),
-                            result -> {
-                                onActivityResult(activity, REQUEST_LAUNCH_LIBRARY, result.getResultCode(), result.getData());
-                            }
-                    );
-
-                }
+                libraryLauncher = activity.registerForActivityResult(
+                        new ActivityResultContracts.StartActivityForResult(),
+                        result -> {
+                            onActivityResult(activity, REQUEST_LAUNCH_LIBRARY, result.getResultCode(), result.getData());
+                        }
+                );
             } catch (IllegalStateException e) {
                 // Failed to register - activity in wrong state
             }
@@ -251,8 +245,6 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
             this.callback = null;
         }
     }
-
-
 
     void onAssetsObtained(List<Uri> fileUris) {
         try {
