@@ -28,6 +28,11 @@ import java.util.UUID;
 
 import static com.imagepicker.Utils.*;
 
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia;
+import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia;
+
 import javax.annotation.Nullable;
 
 @ReactModule(name = ImagePickerModule.NAME)
@@ -199,44 +204,48 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         this.callback = callback;
         this.options = new Options(options);
 
+        PickVisualMedia.VisualMediaType mediaType;
+        PickVisualMediaRequest mediaRequest;
+
         int requestCode;
         Intent libraryIntent;
         requestCode = REQUEST_LAUNCH_LIBRARY;
 
-        boolean isSingleSelect = this.options.selectionLimit == 1;
+        int selectionLimit = this.options.selectionLimit;
+        boolean isSingleSelect = selectionLimit == 1;
         boolean isPhoto = this.options.mediaType.equals(mediaTypePhoto);
         boolean isVideo = this.options.mediaType.equals(mediaTypeVideo);
         boolean isMixed = this.options.mediaType.equals(mediaTypeMixed);
 
-        if (isSingleSelect && (isPhoto || isVideo)) {
-            libraryIntent = new Intent(Intent.ACTION_PICK);
-        } else {
-            libraryIntent = new Intent(Intent.ACTION_GET_CONTENT);
-            libraryIntent.addCategory(Intent.CATEGORY_OPENABLE);
-        }
-
-        if (!isSingleSelect) {
-            libraryIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        }
-
+        // Note: Casting works, even though Android Studio complains about it
         if (isPhoto) {
-            libraryIntent.setType("image/*");
+            mediaType = (PickVisualMedia.VisualMediaType) PickVisualMedia.ImageOnly.INSTANCE;
         } else if (isVideo) {
-            libraryIntent.setType("video/*");
-        } else if (isMixed) {
-            libraryIntent.setType("*/*");
-            libraryIntent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+            mediaType = (PickVisualMedia.VisualMediaType) PickVisualMedia.VideoOnly.INSTANCE;
         } else {
-            libraryIntent.setType("*/*");
+            mediaType = (PickVisualMedia.VisualMediaType) PickVisualMedia.ImageAndVideo.INSTANCE;
         }
 
-        Intent chooserIntent = Intent.createChooser(libraryIntent, null);
+        mediaRequest = new PickVisualMediaRequest.Builder()
+                .setMediaType(mediaType)
+                .build();
+
+        // https://developer.android.com/training/data-storage/shared/photopicker
+        if (isSingleSelect) {
+            libraryIntent = new PickVisualMedia().createIntent(this.reactContext.getApplicationContext(), mediaRequest);
+        } else {
+            PickMultipleVisualMedia pickMultipleVisualMedia = selectionLimit > 1
+                    ? new PickMultipleVisualMedia(selectionLimit)
+                    : new PickMultipleVisualMedia();
+            libraryIntent = pickMultipleVisualMedia.createIntent(this.reactContext.getApplicationContext(), mediaRequest);
+        }
+
+        if (isMixed) {
+            libraryIntent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+        }
+
         try {
-            if (libraryLauncher != null) {
-                libraryLauncher.launch(chooserIntent);
-            } else {
-                currentActivity.startActivityForResult(chooserIntent, requestCode);
-            }
+            currentActivity.startActivityForResult(libraryIntent, requestCode);
         } catch (ActivityNotFoundException e) {
             callback.invoke(getErrorMap(errOthers, e.getMessage()));
             this.callback = null;
