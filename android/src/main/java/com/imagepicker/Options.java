@@ -14,6 +14,7 @@ public class Options {
     Boolean saveToPhotos;
     int durationLimit;
     Boolean useFrontCamera = false;
+    Boolean forceGetContent = false;
     String mediaType;
 
 
@@ -30,6 +31,10 @@ public class Options {
 
         if (options.getString("cameraType").equals("front")) {
             useFrontCamera = true;
+        }
+
+        if (options.hasKey("forceGetContent") && options.getBoolean("forceGetContent")) {
+            forceGetContent = true;
         }
 
         quality = (int) (options.getDouble("quality") * 100);
