@@ -208,7 +208,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
         boolean isVideo = this.options.mediaType.equals(mediaTypeVideo);
         boolean isMixed = this.options.mediaType.equals(mediaTypeMixed);
 
-        if (isSingleSelect && (isPhoto || isVideo)) {
+        // ACTION_PICK is not supported on Meta Quest devices. We force the use of ACTION_GET_CONTENT.
+        // This is fixed in the latest version of the library (tested on 8.2.1).
+        if (isSingleSelect && (isPhoto || isVideo) && !this.options.forceGetContent) {
             libraryIntent = new Intent(Intent.ACTION_PICK);
         } else {
             libraryIntent = new Intent(Intent.ACTION_GET_CONTENT);

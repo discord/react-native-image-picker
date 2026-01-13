@@ -9,6 +9,11 @@ export interface ImageLibraryOptions {
   videoQuality?: AndroidVideoOptions | iOSVideoOptions;
   includeBase64?: boolean;
   includeExtra?: boolean;
+  /**
+   * Android only. Forces the use of ACTION_GET_CONTENT intent instead of ACTION_PICK.
+   * It is used on Meta Quest devices since ACTION_PICK is not supported.
+   */
+  forceGetContent?: boolean;
 }
 
 export interface CameraOptions
