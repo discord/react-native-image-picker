@@ -160,6 +160,35 @@ public class Utils {
         return new int[]{options.outWidth, options.outHeight};
     }
 
+    // Like getImageDimensions but swaps width/height when the EXIF orientation indicates
+    // a 90/270-degree rotation, so callers can report dimensions consistent with how the
+    // image will actually be rendered. Must NOT be used for pixel-level scaling (e.g.
+    // Bitmap.createScaledBitmap inside resizeImage) — those need the raw pixel dimensions.
+    public static int[] getDisplayImageDimensions(Uri uri, Context reactContext) {
+        int[] dims = getImageDimensions(uri, reactContext);
+        int width = dims[0];
+        int height = dims[1];
+
+        try (InputStream exifStream = reactContext.getContentResolver().openInputStream(uri)) {
+            if (exifStream != null) {
+                int orientation = new ExifInterface(exifStream).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                if (orientation == ExifInterface.ORIENTATION_ROTATE_90
+                    || orientation == ExifInterface.ORIENTATION_ROTATE_270
+                    || orientation == ExifInterface.ORIENTATION_TRANSPOSE
+                    || orientation == ExifInterface.ORIENTATION_TRANSVERSE) {
+                    int swap = width;
+                    width = height;
+                    height = swap;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return new int[]{width, height};
+    }
+
     static boolean hasPermission(final Activity activity) {
         final int writePermission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
         return writePermission == PackageManager.PERMISSION_GRANTED ? true : false;
@@ -396,7 +425,7 @@ public class Utils {
     static ReadableMap getImageResponseMap(Uri uri, Options options, Context context) {
         String fileName = uri.getLastPathSegment();
         ImageMetadata imageMetadata = new ImageMetadata(uri, context);
-        int[] dimensions = getImageDimensions(uri, context);
+        int[] dimensions = getDisplayImageDimensions(uri, context);
 
         WritableMap map = Arguments.createMap();
         map.putString("uri", uri.toString());
