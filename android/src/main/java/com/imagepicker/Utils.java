@@ -162,8 +162,7 @@ public class Utils {
 
     // Like getImageDimensions but swaps width/height when the EXIF orientation indicates
     // a 90/270-degree rotation, so callers can report dimensions consistent with how the
-    // image will actually be rendered. Must NOT be used for pixel-level scaling (e.g.
-    // Bitmap.createScaledBitmap inside resizeImage) — those need the raw pixel dimensions.
+    // image will actually be rendered.
     public static int[] getDisplayImageDimensions(Uri uri, Context reactContext) {
         int[] dims = getImageDimensions(uri, reactContext);
         int width = dims[0];
