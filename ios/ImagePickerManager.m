@@ -27,7 +27,7 @@ NSString *errPermission = @"permission";
 NSString *errOthers = @"others";
 RNImagePickerTarget target;
 
-photoSelected = NO;
+bool photoSelected = NO;
 
 RCT_EXPORT_MODULE();
 
@@ -506,6 +506,8 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker
 {
+    if (photoSelected == YES) { return; }
+    photoSelected = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
         [picker dismissViewControllerAnimated:YES completion:^{
             self.callback(@[@{@"didCancel": @YES}]);
@@ -519,6 +521,8 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
 - (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController
 {
+    if (photoSelected == YES) { return; }
+    photoSelected = YES;
     self.callback(@[@{@"didCancel": @YES}]);
 }
 
