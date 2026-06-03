@@ -28,8 +28,7 @@ NSString *errCameraUnavailable = @"camera_unavailable";
 NSString *errPermission = @"permission";
 NSString *errOthers = @"others";
 RNImagePickerTarget target;
-
-photoSelected = NO;
+bool photoSelected = NO;
 
 RCT_EXPORT_MODULE();
 
