@@ -12,6 +12,8 @@
 @property (nonatomic, strong) RCTResponseSenderBlock callback;
 @property (nonatomic, copy) NSDictionary *options;
 
+- (void)invokeCallback:(NSArray *)args;
+
 @end
 
 @interface ImagePickerManager (UIImagePickerControllerDelegate) <UINavigationControllerDelegate, UIImagePickerControllerDelegate>
@@ -54,7 +56,7 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     self.callback = callback;
     
     if (target == camera && [ImagePickerUtils isSimulator]) {
-        self.callback(@[@{@"errorCode": errCameraUnavailable}]);
+        [self invokeCallback:@[@{@"errorCode": errCameraUnavailable}]];
         return;
     }
     
@@ -74,7 +76,7 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
                     
                     [self checkPhotosPermissions:^(BOOL granted) {
                         if (!granted) {
-                            self.callback(@[@{@"errorCode": errPermission}]);
+                            [self invokeCallback:@[@{@"errorCode": errPermission}]];
                             return;
                         }
                         [self showPickerViewController:picker];
@@ -95,7 +97,7 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     if([self.options[@"includeExtra"] boolValue]) {
         [self checkPhotosPermissions:^(BOOL granted) {
             if (!granted) {
-                self.callback(@[@{@"errorCode": errPermission}]);
+                [self invokeCallback:@[@{@"errorCode": errPermission}]];
                 return;
             }
             [self showPickerViewController:picker];
@@ -114,6 +116,18 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
 }
 
 #pragma mark - Helpers
+
+- (void)invokeCallback:(NSArray *)args
+{
+    RCTResponseSenderBlock callback = nil;
+    @synchronized (self) {
+        callback = self.callback;
+        self.callback = nil;
+    }
+    if (callback != nil) {
+        callback(args);
+    }
+}
 
 NSData* extractImageData(UIImage* image){
     CFMutableDataRef imageData = CFDataCreateMutable(NULL, 0);
@@ -485,7 +499,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
             if (videoAsset == nil) {
                 NSString *errorMessage = error.localizedFailureReason;
                 if (errorMessage == nil) errorMessage = @"Video asset not found";
-                self.callback(@[@{@"errorCode": errOthers, @"errorMessage": errorMessage}]);
+                [self invokeCallback:@[@{@"errorCode": errOthers, @"errorMessage": errorMessage}]];
                 return;
             }
             [assets addObject:videoAsset];
@@ -496,7 +510,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
         if (@available(iOS 15, *)) {
             response[@"replaceSelection"] = @(YES);
         }
-        self.callback(@[response]);
+        [self invokeCallback:@[response]];
     };
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -508,7 +522,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         [picker dismissViewControllerAnimated:YES completion:^{
-            self.callback(@[@{@"didCancel": @YES}]);
+            [self invokeCallback:@[@{@"didCancel": @YES}]];
         }];
     });
 }
@@ -519,7 +533,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
 - (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController
 {
-    self.callback(@[@{@"didCancel": @YES}]);
+    [self invokeCallback:@[@{@"didCancel": @YES}]];
 }
 
 @end
@@ -624,7 +638,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
         //  mapVideoToAsset can fail and return nil, leaving asset NSNull.
         for (NSDictionary* asset in assets) {
             if ([asset isEqual:[NSNull null]]) {
-                self.callback(@[ @{@"errorCode" : errOthers} ]);
+                [self invokeCallback:@[ @{@"errorCode" : errOthers} ]];
                 return;
             }
         }
@@ -634,7 +648,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
         if (@available(iOS 15, *)) {
             response[@"replaceSelection"] = @(YES);
         }
-        self.callback(@[ response ]);
+        [self invokeCallback:@[ response ]];
     });
 }
 
