@@ -490,8 +490,16 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
         if ([info[UIImagePickerControllerMediaType] isEqualToString:(NSString *) kUTTypeImage]) {
             UIImage *image = [ImagePickerManager getUIImageFromInfo:info];
+            NSURL *imageURL = [ImagePickerManager getNSURLFromInfo:info];
             
-            [assets addObject:[self mapImageToAsset:image data:[NSData dataWithContentsOfURL:[ImagePickerManager getNSURLFromInfo:info]] phAsset:asset]];
+            [assets addObject:[self mapImageToAsset:image data:[NSData dataWithContentsOfURL:imageURL] phAsset:asset]];
+
+            // The legacy picker supplies an intermediate file that mapImageToAsset copies.
+            NSString *temporaryDirectory = [NSTemporaryDirectory() stringByResolvingSymlinksInPath];
+            NSString *imagePath = [imageURL.path stringByResolvingSymlinksInPath];
+            if (imageURL.isFileURL && [imagePath hasPrefix:[temporaryDirectory stringByAppendingString:@"/"]]) {
+                [[NSFileManager defaultManager] removeItemAtURL:imageURL error:nil];
+            }
         } else {
             NSError *error;
             NSDictionary *videoAsset = [self mapVideoToAsset:info[UIImagePickerControllerMediaURL] phAsset:asset error:&error];
