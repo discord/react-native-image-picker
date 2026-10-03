@@ -22,6 +22,8 @@
 @interface ImagePickerManager (UIAdaptivePresentationControllerDelegate) <UIAdaptivePresentationControllerDelegate>
 @end
 
+static RNImagePickerTemporaryFilePathProvider temporaryFilePathProvider;
+
 @implementation ImagePickerManager
 
 NSString *errCameraUnavailable = @"camera_unavailable";
@@ -32,6 +34,11 @@ RNImagePickerTarget target;
 BOOL photoSelected = NO;
 
 RCT_EXPORT_MODULE();
+
++ (void)setTemporaryFilePathProvider:(RNImagePickerTemporaryFilePathProvider)provider
+{
+    temporaryFilePathProvider = [provider copy];
+}
 
 RCT_EXPORT_METHOD(launchCamera:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
 {
@@ -204,7 +211,7 @@ NSData* extractImageData(UIImage* image){
     asset[@"type"] = [@"image/" stringByAppendingString:fileType];
 
     NSString *fileName = [self getImageFileName:fileType];
-    NSString *path = [[NSTemporaryDirectory() stringByStandardizingPath] stringByAppendingPathComponent:fileName];
+    NSString *path = [self temporaryFilePathForFileName:fileName];
     [data writeToFile:path atomically:YES];
 
     if ([self.options[@"includeBase64"] boolValue]) {
@@ -286,7 +293,7 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
 
 -(NSMutableDictionary *)mapVideoToAsset:(NSURL *)url phAsset:(PHAsset * _Nullable)phAsset error:(NSError **)error {
     NSString *fileName = [url lastPathComponent];
-    NSString *path = [[NSTemporaryDirectory() stringByStandardizingPath] stringByAppendingPathComponent:fileName];
+    NSString *path = [self temporaryFilePathForFileName:fileName];
     NSURL *videoDestinationURL = [NSURL fileURLWithPath:path];
     NSMutableDictionary *asset = [[NSMutableDictionary alloc] init];
     
@@ -441,6 +448,14 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(
             [self checkPhotosPermissions:permissionBlock];
         }
     }
+}
+
+- (NSString *)temporaryFilePathForFileName:(NSString *)fileName
+{
+    if (temporaryFilePathProvider != nil) {
+        return temporaryFilePathProvider(fileName.pathExtension);
+    }
+    return [[NSTemporaryDirectory() stringByStandardizingPath] stringByAppendingPathComponent:fileName];
 }
 
 - (NSString *)getImageFileName:(NSString *)fileType

@@ -7,6 +7,11 @@ typedef NS_ENUM(NSInteger, RNImagePickerTarget) {
   library
 };
 
+typedef NSString * _Nonnull (^RNImagePickerTemporaryFilePathProvider)(NSString * _Nonnull pathExtension);
+
 @interface ImagePickerManager : NSObject <RCTBridgeModule>
+
+// Configure before presenting a picker. Return a unique writable path for each file.
++ (void)setTemporaryFilePathProvider:(RNImagePickerTemporaryFilePathProvider _Nullable)provider;
 
 @end
