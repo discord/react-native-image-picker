@@ -24,6 +24,7 @@ import com.facebook.react.module.annotations.ReactModule;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.imagepicker.Utils.*;
@@ -80,6 +81,11 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
     @Override
     public String getName() {
         return NAME;
+    }
+
+    @Override
+    public Map<String, Object> getConstants() {
+        return Collections.singletonMap("isPhotoPickerAvailable", PhotoPicker.isAvailable(reactContext));
     }
 
     /**
@@ -232,7 +238,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule implements Act
             libraryIntent.setType("*/*");
         }
 
-        Intent chooserIntent = Intent.createChooser(libraryIntent, null);
+        Intent chooserIntent = PhotoPicker.shouldUse(reactContext, this.options)
+                ? PhotoPicker.createIntent(currentActivity, this.options)
+                : Intent.createChooser(libraryIntent, null);
         try {
             if (libraryLauncher != null) {
                 libraryLauncher.launch(chooserIntent);
