@@ -1,4 +1,4 @@
-import {NativeModules} from 'react-native';
+import {NativeModules, Platform} from 'react-native';
 
 import {CameraOptions, ImageLibraryOptions, Callback, ImagePickerResponse} from './types';
 export * from './types';
@@ -43,4 +43,16 @@ export function launchImageLibrary(
     );
   })
   
+}
+
+export function canUseAndroidPhotoPicker(options: ImageLibraryOptions): boolean {
+  if (Platform.OS !== 'android') {
+    return false;
+  }
+  // Mirrors PhotoPicker.shouldUse in PhotoPicker.java.
+  const {enableAndroidPhotoPicker, forceGetContent, mediaType} = {...DEFAULT_OPTIONS, ...options};
+  if (enableAndroidPhotoPicker !== true || forceGetContent === true || (mediaType as string) === 'any') {
+    return false;
+  }
+  return NativeModules.ImagePickerManager.isPhotoPickerAvailable === true;
 }

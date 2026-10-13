@@ -15,6 +15,7 @@ public class Options {
     int durationLimit;
     Boolean useFrontCamera = false;
     Boolean forceGetContent = false;
+    Boolean enableAndroidPhotoPicker = false;
     String mediaType;
 
 
@@ -35,6 +36,10 @@ public class Options {
 
         if (options.hasKey("forceGetContent") && options.getBoolean("forceGetContent")) {
             forceGetContent = true;
+        }
+
+        if (options.hasKey("enableAndroidPhotoPicker") && options.getBoolean("enableAndroidPhotoPicker")) {
+            enableAndroidPhotoPicker = true;
         }
 
         quality = (int) (options.getDouble("quality") * 100);

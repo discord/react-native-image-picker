@@ -14,6 +14,11 @@ export interface ImageLibraryOptions {
    * It is used on Meta Quest devices since ACTION_PICK is not supported.
    */
   forceGetContent?: boolean;
+  /**
+   * Android only. Uses the system Photo Picker when it's available and `mediaType` is not `any`.
+   * Falls back to the legacy intents otherwise.
+   */
+  enableAndroidPhotoPicker?: boolean;
 }
 
 export interface CameraOptions
